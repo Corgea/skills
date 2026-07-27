@@ -1,0 +1,86 @@
+name: Trigger AI Docs Sync on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: "Base commit SHA to diff from"
+        required: true
+        type: string
+      head_sha:
+        description: "Head commit SHA to diff to"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialize runs so two PRs merged close together cannot open competing pull
+# requests against the docs repo.
+concurrency:
+  group: sync-docs
+  cancel-in-progress: false
+
+jobs:
+  run-codex-docs-sync:
+    # This repo is public, and pull_request runs from a fork receive no secrets.
+    # Skip those instead of burning a run that fails on an empty API key.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.head.repo.fork == false)
+    runs-on: ubuntu-latest
+    steps:
+      # The secrets context is not available to a job-level `if`, so gate here
+      # instead. This repo is public, and a merge that fails on an unset secret
+      # shows a red check to everyone; warn and skip instead.
+      - name: Check required secrets
+        id: preflight
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DOCS_REPO_TOKEN: ${{ secrets.DOCS_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENAI_API_KEY:-}" || -z "${DOCS_REPO_TOKEN:-}" ]]; then
+            echo "::warning::OPENAI_API_KEY or DOCS_REPO_TOKEN is not configured on this repository; skipping the docs sync."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No actions/checkout here on purpose. The composite action checks this
+      # repo out into ./source itself; a second checkout at the workspace root
+      # would put plugins/*/skills/*/SKILL.md directly under Codex's working
+      # directory, where it is an inviting wrong target for edits that would
+      # then be silently discarded.
+      - name: Run AI Docs Sync
+        if: steps.preflight.outputs.skip == 'false'
+        uses: Corgea/internal_actions/sync-docs-action@main
+        with:
+          base_sha: ${{ github.event.inputs.base_sha || github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.inputs.head_sha || github.event.pull_request.head.sha }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          docs_repo_token: ${{ secrets.DOCS_REPO_TOKEN }}
+          docs_repo: "Corgea/docs"
+          docs_base_branch: "main"
+          pr_info: |
+            The source repo is Corgea/skills, the public Corgea Agent Skills
+            marketplace. It holds SKILL.md files read by coding agents, not
+            product code.
+
+            Skill changes are documented in the "Skills Marketplace" section of
+            agentic_integrations.mdx. Document that a skill exists, what it is
+            for, and how to install it. Never restate a SKILL.md line by line:
+            skills are agent-facing instructions, while the docs are for humans
+            deciding which skill to install.
+
+            A change confined to the wording of an existing skill's instructions
+            usually needs no docs update. Adding, removing, or renaming a skill
+            always does.
+
+            PR Title: ${{ github.event.pull_request.title }}
+            PR Description: ${{ github.event.pull_request.body }}

@@ -150,4 +150,5 @@ Language values: `python`, `java`, `javascript`, `tsx`, `typescript`, `go`,
   reporting a finding as real.
 
 For hosted scanning with AI triage, false-positive reduction, and automated
-fixes, Sighthound is built into [Corgea](https://corgea.app).
+fixes, Sighthound is built into [Corgea](https://corgea.app) — see the
+`corgea-scan` skill.

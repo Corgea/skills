@@ -1,0 +1,9 @@
+{
+  "name": "corgea",
+  "description": "Scan code with Corgea's AI-powered BLAST scanner and apply the AI-generated fixes",
+  "version": "1.0.0",
+  "author": { "name": "Corgea", "email": "support@corgea.com" },
+  "repository": "https://github.com/Corgea/skills",
+  "license": "MIT",
+  "keywords": ["sast", "security", "vulnerability-scanner", "code-fixes", "claude-code"]
+}

@@ -11,6 +11,15 @@
   },
   "plugins": [
     {
+      "name": "corgea",
+      "description": "Scan code with Corgea's AI-powered BLAST scanner and apply the AI-generated fixes",
+      "version": "1.0.0",
+      "author": { "name": "Corgea", "email": "support@corgea.com" },
+      "source": "./plugins/corgea",
+      "category": "security",
+      "keywords": ["sast", "security", "vulnerability-scanner", "code-fixes", "claude-code"]
+    },
+    {
       "name": "sighthound",
       "description": "Run Sighthound, a fast tree-sitter SAST scanner with pattern matching and taint-flow analysis",
       "version": "1.0.0",

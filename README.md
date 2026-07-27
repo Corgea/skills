@@ -19,6 +19,7 @@ Or as a Claude Code plugin:
 
 | Skill | Description |
 |---|---|
+| [corgea-scan](plugins/corgea/skills/corgea-scan) | Scan with the [Corgea CLI](https://github.com/Corgea/cli)'s AI-powered BLAST scanner, then review and apply the AI-generated fixes |
 | [sighthound](plugins/sighthound/skills/sighthound) | Run [Sighthound](https://github.com/Corgea/Sighthound), a fast tree-sitter SAST scanner with pattern and taint-flow analysis |
 
 ## License

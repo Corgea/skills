@@ -1,0 +1,9 @@
+{
+  "name": "sighthound",
+  "description": "Run Sighthound, a fast tree-sitter SAST scanner with pattern matching and taint-flow analysis",
+  "version": "1.0.0",
+  "author": { "name": "Corgea", "email": "support@corgea.com" },
+  "repository": "https://github.com/Corgea/skills",
+  "license": "MIT",
+  "keywords": ["sast", "security", "vulnerability-scanner", "taint-analysis", "claude-code"]
+}

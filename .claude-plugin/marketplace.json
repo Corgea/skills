@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "skills",
+  "owner": {
+    "name": "Corgea",
+    "email": "support@corgea.com"
+  },
+  "metadata": {
+    "description": "Agent skills for Corgea tools",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "sighthound",
+      "description": "Run Sighthound, a fast tree-sitter SAST scanner with pattern matching and taint-flow analysis",
+      "version": "1.0.0",
+      "author": { "name": "Corgea", "email": "support@corgea.com" },
+      "source": "./plugins/sighthound",
+      "category": "security",
+      "keywords": ["sast", "security", "vulnerability-scanner", "taint-analysis", "claude-code"]
+    }
+  ]
+}

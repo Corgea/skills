@@ -17,13 +17,43 @@ Check first:
 sighthound --version
 ```
 
-If missing (needs Rust 1.85+):
+"Built from commit: unknown" is normal for source builds — not a broken install.
+
+With cargo (Rust 1.88+):
 
 ```bash
 cargo install --git https://github.com/Corgea/Sighthound --bin sighthound
 ```
 
-Or build from a clone: `cargo build --release` → `target/release/sighthound`.
+`--bin sighthound` matters: the crate also ships a dev-only `harness` binary
+you don't want on PATH.
+
+Or clone and build. The binary is self-contained — rules are compiled in, so
+you can copy it anywhere with no `rules/` directory:
+
+```bash
+git clone https://github.com/Corgea/Sighthound && cd Sighthound
+cargo build --release   # binary at target/release/sighthound
+```
+
+No Rust toolchain? Docker:
+
+```bash
+git clone https://github.com/Corgea/Sighthound && cd Sighthound
+docker build --target runtime -t sighthound .
+docker run --rm -v "$PWD":/src sighthound /src --output-format json
+```
+
+`--target runtime` is required — the Dockerfile's default (last) stage is a
+binary-export scratch image, not runnable. To extract the Linux binary
+instead of building an image:
+
+```bash
+DOCKER_BUILDKIT=1 docker build --target export --output type=local,dest=./sighthound_release .
+```
+
+No prebuilt release binaries, crates.io package, or published container image
+exist yet — source or Docker are the only channels.
 
 ## Scan
 
@@ -33,7 +63,8 @@ Always use JSON output when you will parse the results:
 sighthound --output-format json <root_dir> > findings.json
 ```
 
-Human-readable text is the default format. Other formats: `csv`, `sarif`.
+Progress output is auto-suppressed for machine formats (`json`, `csv`,
+`sarif`), so redirects stay clean. Human-readable text is the default format.
 
 Scan the repository root with `.` as `<root_dir>` so reported paths stay
 repository-relative.
@@ -83,15 +114,20 @@ GitHub Code Scanning:
 ## Scope and tune
 
 ```bash
---taint-analysis            # taint mode only (default: both modes)
---simple-analysis           # pattern mode only
+--taint-analysis            # taint mode only (mutually exclusive with --simple-analysis)
+--simple-analysis           # pattern mode only (default: both modes, deduplicated)
 --code-type frontend        # frontend | backend | both
 --language-filter python    # restrict to one language
 --threads 4                 # default: all cores
---include-test-fixtures     # tests/ dirs are skipped by default
+--include-test-fixtures     # re-include tests/ and test/ dirs
 ```
 
-Minified JavaScript is skipped by default.
+Skipped by default: `tests`/`test` directories, `.gitignore`d files, files
+over 10 MB, minified JavaScript, and dependency dirs (`node_modules`, `venv`,
+`vendor`, ...). If a file you expected in the results is missing, check these
+first.
+
+Troubleshooting: `RUST_LOG=debug sighthound ...` for detailed logs.
 
 ## Custom rules
 
@@ -100,8 +136,11 @@ the [Rule Writing Guide](https://github.com/Corgea/Sighthound/blob/main/rules/RU
 then run them with:
 
 ```bash
-sighthound <root_dir> <language> <rules_path>
+sighthound <root_dir> <language> <rules_path> --use-file-rules
 ```
+
+Language values: `python`, `java`, `javascript`, `tsx`, `typescript`, `go`,
+`ruby`, `csharp`, `html`, `django`, `php`, `objectscript`.
 
 ## Limitations
 

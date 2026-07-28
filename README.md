@@ -13,16 +13,35 @@ npx skills add corgea/skills --skill '*'
 
 Or install one skill:
 
+Corgea Scan:
+
 ```bash
 npx skills add corgea/skills --skill corgea-scan
+```
+
+Sighthound:
+
+```bash
 npx skills add corgea/skills --skill sighthound
 ```
 
-For Claude Code, add the marketplace and install both plugins:
+For Claude Code, add the marketplace:
 
 ```text
 /plugin marketplace add corgea/skills
+```
+
+Then install one plugin:
+
+Corgea Scan:
+
+```text
 /plugin install corgea@skills
+```
+
+Sighthound:
+
+```text
 /plugin install sighthound@skills
 ```
 

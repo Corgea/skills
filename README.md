@@ -19,6 +19,12 @@ Corgea Scan:
 npx skills add corgea/skills --skill corgea-scan
 ```
 
+Corgea MCP:
+
+```bash
+npx skills add corgea/skills --skill corgea-mcp
+```
+
 Sighthound:
 
 ```bash
@@ -39,6 +45,12 @@ Corgea Scan:
 /plugin install corgea@skills
 ```
 
+Corgea MCP:
+
+```text
+/plugin install corgea-mcp@skills
+```
+
 Sighthound:
 
 ```text
@@ -50,7 +62,9 @@ Sighthound:
 | Skill | Description |
 |---|---|
 | [corgea-scan](plugins/corgea/skills/corgea-scan) | Scan with the [Corgea CLI](https://github.com/Corgea/cli)'s AI-powered BLAST scanner, then review and apply the AI-generated fixes |
+| [corgea-mcp](plugins/corgea-mcp/skills/corgea-mcp) | Query Corgea scans, findings, dependencies, and blocking rules over [MCP](https://docs.corgea.app/modelcontextprotocol) |
 | [sighthound](plugins/sighthound/skills/sighthound) | Run [Sighthound](https://github.com/Corgea/Sighthound), a fast tree-sitter SAST scanner with pattern and taint-flow analysis |
+| [sighthound-rules](plugins/sighthound/skills/sighthound-rules) | Write, test, and debug custom [Sighthound](https://github.com/Corgea/Sighthound) detection rules in RON format |
 
 ## License
 

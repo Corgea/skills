@@ -131,9 +131,9 @@ Troubleshooting: `RUST_LOG=debug sighthound ...` for detailed logs.
 
 ## Custom rules
 
-Rules are RON files (`mode: "search"` or `mode: "taint"`). Write new ones with
-the [Rule Writing Guide](https://github.com/Corgea/Sighthound/blob/main/rules/RULE_WRITING_GUIDE.md),
-then run them with:
+Rules are RON files (`mode: "search"` or `mode: "taint"`). To author or debug
+one, use the `sighthound-rules` skill, which covers the schema and the local
+test loop. To run rules you already have:
 
 ```bash
 sighthound <root_dir> <language> <rules_path> --use-file-rules

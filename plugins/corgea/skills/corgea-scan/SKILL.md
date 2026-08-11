@@ -1,6 +1,6 @@
 ---
 name: corgea-scan
-description: Scan a codebase for security vulnerabilities with Corgea's AI-powered BLAST scanner, then review and apply the AI-generated fixes. Use when asked to security-scan a project, scan a pull request diff or uncommitted changes before committing, list or inspect Corgea findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report to Corgea, gate CI on severity, or produce SARIF for GitHub Code Scanning.
+description: Scan a codebase for security vulnerabilities with Corgea's AI-powered BLAST scanner, then review and apply the AI-generated fixes. Use when asked to security-scan a project, scan a pull request diff or uncommitted changes before committing, list or inspect Corgea security or code-quality findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report to Corgea, gate CI on severity or blocking rules, or produce SARIF or a CycloneDX SBOM.
 ---
 
 # Corgea
@@ -51,8 +51,8 @@ Use BLAST unless the user asks for something else. `semgrep` and `snyk` must
 already be installed and on `PATH`; Corgea only orchestrates and uploads them.
 
 Most flags are BLAST-only and exit 1 with `semgrep` or `snyk`: `--fail`,
-`--fail-on`, `--only-uncommitted`, `--out-format`, `--out-file`, `--exclude`,
-and `--metadata`. `--target`, `--scan-type`, and `--policy` are worse — those
+`--fail-on`, `--block-on`, `--only-uncommitted`, `--out-format`, `--out-file`,
+`--exclude`, `--metadata`, and `--sbom`. `--target`, `--scan-type`, and `--policy` are worse — those
 scanners accept them and then silently ignore them, always scanning the whole
 project. `--project-name` is the only flag that behaves the same everywhere.
 
@@ -86,6 +86,8 @@ A scan with no `--scan-type` runs all of them.
 
 ```bash
 corgea scan --out-format sarif --out-file results.sarif   # json, html, sarif, markdown
+corgea scan --sbom                                        # CycloneDX to bom.json
+corgea scan --sbom sbom.cdx.json                          # custom SBOM path
 corgea scan --project-name my-service                     # defaults to the git repo name
 ```
 
@@ -102,7 +104,12 @@ exited the scan early (it keeps running server-side), or you ran
 ```bash
 corgea wait             # latest in-progress scan
 corgea wait SCAN_ID     # positional, not a --scan-id flag
+corgea wait --repo org/repo
+corgea wait SCAN_ID --project-id PROJECT_ID
 ```
+
+Use `--repo` with an `org/repo` slug or remote URL, or `--project-name` to
+query an exact Corgea project name. `--project-id` requires `SCAN_ID`.
 
 ## Read findings
 
@@ -110,6 +117,8 @@ corgea wait SCAN_ID     # positional, not a --scan-id flag
 corgea ls                                        # scans (alias: corgea list)
 corgea ls --issues --scan-id SCAN_ID             # code/SAST issues in a scan
 corgea ls --sca-issues                           # dependency issues
+corgea ls --code-quality                        # code quality issues (alias: --quality)
+corgea ls --repo https://github.com/org/repo    # resolve the project by repository
 corgea ls --issues --scan-id SCAN_ID --json      # parse this, not the table
 corgea ls --issues --page 2 --page-size 10
 ```
@@ -118,7 +127,10 @@ corgea ls --issues --page 2 --page-size 10
 |---|---|---|
 | `--issues` | `-i` | Code/SAST issues instead of scans |
 | `--sca-issues` | `-c` | SCA (dependency) issues |
+| `--code-quality` | `-q` | Code quality issues (alias `--quality`) |
 | `--scan-id` | `-s` | Restrict to one scan |
+| `--project-name` | | Query an exact Corgea project name |
+| `--repo` | | Resolve from an `org/repo` slug or remote URL |
 | `--page` | `-p` | Page number |
 | `--page-size` | | Items per page |
 | `--json` | | JSON output |
@@ -154,10 +166,14 @@ to confirm the finding is gone.
 corgea scan --fail-on CR             # exit 1 at or above critical (CR, HI, ME, LO)
 corgea scan --fail-on malicious      # exit 1 if any dependency is classified malicious
 corgea scan --fail-on HI,malicious   # comma-separated, trips on either
-corgea scan --fail                   # exit 1 per the blocking rules set in the web app
+corgea scan --block-on criticals     # exit 1 if a named CI blocking rule is violated
+corgea scan --block-on criticals,malicious-deps
+corgea scan --fail                   # deprecated: all active web-app blocking rules
 ```
 
-`--fail-on` and `--fail` are mutually exclusive.
+`--block-on` accepts comma-separated rule slugs shown in the web app. Each rule
+must exist, be active, and apply to CI; otherwise the command exits 1.
+`--fail-on`, `--fail`, and `--block-on` are mutually exclusive.
 
 GitHub Code Scanning:
 

@@ -5,7 +5,7 @@
 // has to be caught before merge.
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 
 const root = process.cwd();
 const errors = [];
@@ -25,6 +25,17 @@ const dirsIn = (path) => {
   const abs = join(root, path);
   if (!existsSync(abs)) return [];
   return readdirSync(abs).filter((n) => statSync(join(abs, n)).isDirectory());
+};
+
+// YAML quoting is optional, so `name: "corgea"` and `name: corgea` are the
+// same value. Comparing the raw text would fail the quoted spelling on a
+// name that is in fact correct.
+const unquote = (value) => {
+  if (value.length < 2) return value;
+  const quote = value[0];
+  if ((quote !== '"' && quote !== "'") || value.at(-1) !== quote) return value;
+  const inner = value.slice(1, -1);
+  return quote === "'" ? inner.replaceAll("''", "'") : inner.replace(/\\(.)/g, "$1");
 };
 
 // Enough of a YAML reader for `key: value` frontmatter. Skills use flat
@@ -48,7 +59,7 @@ const parseFrontmatter = (content, label) => {
       fail(`${label}: frontmatter line is not a 'key: value' pair -> ${line}`);
       continue;
     }
-    fields[match[1]] = match[2].trim();
+    fields[match[1]] = unquote(match[2].trim());
   }
   return { fields, body: content.slice(end + 4) };
 };
@@ -83,12 +94,12 @@ if (marketplace) {
       fail(`${label}: 'source' is required`);
       continue;
     }
-    if (!entry.source.startsWith("./") || entry.source.includes("..")) {
-      fail(`${label}: source must be a relative './' path without '..'`);
+    // Anything else lets the installed tree diverge from the validated one:
+    // the checks below walk `plugins/`, so a source pointing elsewhere ships
+    // a plugin nothing here has looked at.
+    if (entry.source !== `./plugins/${entry.name}`) {
+      fail(`${label}: source must be './plugins/${entry.name}', got '${entry.source}'`);
       continue;
-    }
-    if (basename(entry.source) !== entry.name) {
-      fail(`${label}: source directory must be named after the plugin`);
     }
 
     const manifestPath = join(entry.source, ".claude-plugin/plugin.json");
@@ -159,13 +170,16 @@ if (existsSync(join(root, readmePath))) {
   const rows = [...readme.matchAll(/^\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|/gm)].map((m) => ({
     name: m[1],
     target: m[2],
+    // Compared against a directory on disk, so drop anything addressing
+    // within it.
+    path: m[2].split(/[#?]/)[0],
   }));
 
   for (const skill of skills) {
     const row = rows.find((r) => r.name === skill.name);
     if (!row) {
       fail(`${readmePath}: skills table has no row for '${skill.name}'`);
-    } else if (row.target !== skill.path) {
+    } else if (row.path !== skill.path) {
       fail(`${readmePath}: row '${skill.name}' links to '${row.target}', expected '${skill.path}'`);
     }
   }
@@ -177,7 +191,11 @@ if (existsSync(join(root, readmePath))) {
 
   for (const [, target] of readme.matchAll(/\]\(([^)]+)\)/g)) {
     if (/^(https?:|mailto:|#)/.test(target)) continue;
-    if (!existsSync(join(root, target))) {
+    // A fragment or query is addressing within the target, not part of the
+    // path on disk.
+    const path = target.split(/[#?]/)[0];
+    if (!path) continue;
+    if (!existsSync(join(root, path))) {
       fail(`${readmePath}: relative link '${target}' does not resolve`);
     }
   }

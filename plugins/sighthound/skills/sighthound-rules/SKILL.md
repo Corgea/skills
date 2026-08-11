@@ -58,16 +58,19 @@ Three things trip up anyone arriving from Semgrep or YAML rules:
 
 ### Fields
 
-Only `mode` plus its matching payload is load-bearing. Everything else is
-metadata that shapes the finding.
+Only `mode` and its matching payload change what the scanner does. Everything
+else is metadata that shapes the finding.
 
 | Field | Required | Notes |
 |---|---|---|
-| `mode` | yes | `"search"` or `"taint"`. Defaults to `"search"` if omitted |
+| `mode` | no | `"search"` or `"taint"`; omitted means `"search"`. Every rule in the repo states it anyway — do the same |
 | `pattern` / `patterns` | search mode | At least one |
 | `sources` / `sinks` | taint mode | `sanitizers` and `propagators` optional |
 | `id`, `name`, `category`, `description` | no | Always set these; findings are unreadable without them |
-| `severity`, `confidence`, `finding_type`, `cwe_id` | no | `Critical`, `High`, `Medium`, `Low` |
+| `severity` | no | `Critical`, `High`, `Medium`, `Low`. Omitted reports as `Medium` |
+| `confidence` | no | `High`, `Medium`, `Low`. Omitted reports as `Medium` |
+| `finding_type` | no | Free text, Title Case: `Command Injection`, `SQL Injection`, `Cross-Site Scripting` |
+| `cwe_id` | no | Lowercase `cwe-<number>`, e.g. `cwe-78`. `CWE-78` appears only in comments |
 | `file_types` | no | `extensions`, `include_patterns`, `exclude_patterns` |
 | `conditions` | no | AST and context filters, search mode |
 | `tags`, `message` | no | |
@@ -84,46 +87,77 @@ Tracks untrusted data from `sources` to `sinks`, suppressing the finding when a
 `sanitizer` intervenes. Use it when the danger depends on where the value came
 from, not on the call itself.
 
+One rule per sink class, so the CWE and the sanitizers fit what the rule
+actually catches:
+
 ```ron
 (
-    id: Some("php-taint-001"),
-    name: Some("Untrusted Input to Dangerous Sink"),
-    category: Some("injection"),
-    mode: "taint",
-    sources: Some(["$_GET", "$_POST", "$_REQUEST"]),
-    sinks: Some(["query(", "exec(", "shell_exec("]),
-    sanitizers: Some(["intval", "escapeshellarg", "filter_var"]),
-    finding_type: Some("Tainted Data Flow"),
-    severity: Some("High"),
-    confidence: Some("Medium"),
-    cwe_id: Some("cwe-89"),
-    file_types: Some((
-        extensions: Some([".php"])
-    )),
+    rules: [
+        (
+            id: Some("php-sqli-001"),
+            name: Some("Untrusted Input to SQL Query"),
+            category: Some("injection"),
+            mode: "taint",
+            sources: Some(["$_GET", "$_POST", "$_REQUEST"]),
+            sinks: Some(["query(", "mysqli_query(", "->prepare("]),
+            sanitizers: Some(["intval", "filter_var", "mysqli_real_escape_string"]),
+            finding_type: Some("SQL Injection"),
+            severity: Some("Critical"),
+            confidence: Some("Medium"),
+            cwe_id: Some("cwe-89"),
+            file_types: Some((
+                extensions: Some([".php"])
+            )),
+        ),
+        (
+            id: Some("php-cmdi-001"),
+            name: Some("Untrusted Input to Shell Command"),
+            category: Some("command_execution"),
+            mode: "taint",
+            sources: Some(["$_GET", "$_POST", "$_REQUEST"]),
+            sinks: Some(["exec(", "shell_exec(", "system(", "passthru("]),
+            sanitizers: Some(["escapeshellarg", "escapeshellcmd"]),
+            finding_type: Some("Command Injection"),
+            severity: Some("Critical"),
+            confidence: Some("Medium"),
+            cwe_id: Some("cwe-78"),
+            file_types: Some((
+                extensions: Some([".php"])
+            )),
+        ),
+    ]
 )
 ```
 
 Search mode on the same sink would flag every `query(` in the codebase. Taint
 mode flags only those reachable from request input.
 
+Resist folding sink classes together. A single rule spanning `query(` and
+`shell_exec(` has to pick one `cwe_id` for both, and every finding it reports
+then carries the wrong classification for half its matches — which is how
+`rules/php/taint.ron` ends up filing command execution under `cwe-89`.
+
 ## Test the rule
 
 This is the part to not skip. Write a fixture with a case that should fire and
 a case that should not, then scan it directly:
 
+Run the binary you just built, not whatever `sighthound` is on `PATH` — that
+one is a different version and does not have your rules.
+
 ```bash
 cargo build --release
 
 # One rule file against a fixture directory
-sighthound /tmp/fixture python rules/python/command_injection.ron \
+./target/release/sighthound /tmp/fixture python rules/python/command_injection.ron \
   --use-file-rules --output-format json
 
 # A whole language directory
-sighthound /path/to/project python rules/python \
+./target/release/sighthound /path/to/project python rules/python \
   --use-file-rules --output-format json
 
 # Auto-detect languages, custom rules directory
-sighthound . --use-file-rules --rules-dir rules --output-format json
+./target/release/sighthound . --use-file-rules --rules-dir rules --output-format json
 ```
 
 `--use-file-rules` is mandatory when iterating. Without it the scanner uses the
@@ -159,7 +193,16 @@ make ci                             # the exact gate CI runs
 - `exclusion_patterns.ron` is a different structure and is skipped when rules
   are merged. Do not add detection rules to it.
 
-## Two traps
+## Three traps
+
+**A missing wrapper reads as an empty file.** Every loader deserializes into
+`Rules`, whose `rules` list defaults to empty, so a file holding a bare rule
+tuple parses without complaint and contributes nothing. A search rule written
+that way exits 0 with `[]`, looking like a pattern that does not match; a taint
+rule reports `No taint flow rules found`, which sends you to check `mode`
+instead of the wrapper. `rules/RULE_WRITING_GUIDE.md` has a search-mode example
+in this shape — follow the production `.ron` files instead, which all open with
+`(rules: [`.
 
 **A malformed rule looks like a scanner bug.** There is no rule linter and no
 schema. A RON syntax error or a misspelled field surfaces as a load failure or,

@@ -11,26 +11,31 @@ needs an account and a login — for a fully local scan with no account, use the
 `sighthound` skill instead. To query existing findings without running
 anything, use the `corgea-mcp` skill.
 
-## Get the full reference first
+## Check the installed CLI first
 
-The CLI carries its own complete documentation, compiled into the binary and
-therefore pinned to the exact version installed:
+This file describes the CLI in general. The binary on this machine describes
+itself, and it is the one that has to run the command:
 
 ```bash
-corgea skill show
+corgea --version
+corgea --help
+corgea <command> --help
 ```
 
-**Run this before anything beyond the basics below, and treat its output as
-authoritative.** Where it disagrees with this file, it is right: this file
-describes the CLI in general, that output describes the one on this machine.
-It covers the flag matrix, scan types, export formats, report uploads, CI
-gating, the pip/npm install gate, dependency inventory and SBOMs, and advisory
-lookups.
+**Where `--help` and this file disagree, `--help` is right.** Confirm any
+command or flag you have not seen in `--help` before running it, rather than
+guessing from here.
 
-If the command fails, the installed CLI predates it. Either upgrade, or fall
-back to `corgea --help` and `corgea <command> --help`, which every version
-supports. **Confirm any unfamiliar command or flag against `--help` before
-running it** rather than guessing from this file.
+If something documented here is missing, the installed CLI is older than this
+file. Tell the user, with the upgrade for how they installed it — do not
+upgrade unprompted, since CI runners and self-hosted installs are often pinned
+deliberately. A missing flag is the visible case; a changed default or output
+shape will not error, so treat a surprising result on an older CLI as a
+version difference before treating it as a bug.
+
+The full reference — flag matrix, scan types, export formats, report uploads,
+CI gating, the install gate, SBOMs and advisory lookups — is in the
+[CLI docs](https://docs.corgea.app/install_cli).
 
 ## Install
 

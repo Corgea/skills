@@ -13,6 +13,10 @@ const errors = [];
 const fail = (msg) => errors.push(msg);
 
 const readJson = (path) => {
+  if (!existsSync(join(root, path))) {
+    fail(`${path}: is required but does not exist`);
+    return null;
+  }
   try {
     return JSON.parse(readFileSync(join(root, path), "utf8"));
   } catch (e) {
@@ -31,15 +35,52 @@ const dirsIn = (path) => {
 // same value. Comparing the raw text would fail the quoted spelling on a
 // name that is in fact correct.
 const unquote = (value) => {
-  if (value.length < 2) return value;
   const quote = value[0];
-  if ((quote !== '"' && quote !== "'") || value.at(-1) !== quote) return value;
   const inner = value.slice(1, -1);
   return quote === "'" ? inner.replaceAll("''", "'") : inner.replace(/\\(.)/g, "$1");
 };
 
+const isClosedQuote = (raw, quote) => {
+  if (raw.length < 2 || raw.at(-1) !== quote) return false;
+  // A closing double quote cancelled by a backslash closes nothing.
+  return quote === "'" || /\\*$/.exec(raw.slice(0, -1))[0].length % 2 === 0;
+};
+
+// This reader understands one shape: a scalar, quoted or not, on a single
+// line. Everything else it would keep as text and then validate as though it
+// were the value — an unterminated list would pass as a description that
+// happens to start with '['. So read what is supported and reject the rest by
+// name, rather than half-parsing it.
+const readScalar = (raw) => {
+  if (!raw) return { value: "" };
+  const first = raw[0];
+  if (first === "[" || first === "{") {
+    return { error: "flow collections are not supported; write it as a single-line scalar" };
+  }
+  if (first === "|" || first === ">") {
+    return { error: "block scalars are not supported; write it as a single-line scalar" };
+  }
+  if (first === "&" || first === "*" || first === "!") {
+    return { error: "anchors, aliases and tags are not supported" };
+  }
+  if (first === '"' || first === "'") {
+    if (!isClosedQuote(raw, first)) return { error: `quoted value is never closed with ${first}` };
+    return { value: unquote(raw) };
+  }
+  // Both of these mean something else to YAML: ': ' opens a nested mapping and
+  // ' #' opens a comment, so the value read here would not be the value a real
+  // parser reads.
+  if (raw.includes(": ") || raw.endsWith(":")) {
+    return { error: "an unquoted value cannot contain ': '; wrap it in quotes" };
+  }
+  if (raw.includes(" #")) {
+    return { error: "an unquoted value cannot contain ' #'; wrap it in quotes" };
+  }
+  return { value: raw };
+};
+
 // Enough of a YAML reader for `key: value` frontmatter. Skills use flat
-// scalars only; anything nested is rejected below rather than half-parsed.
+// scalars only; anything else is rejected rather than half-parsed.
 const parseFrontmatter = (content, label) => {
   if (!content.startsWith("---\n")) {
     fail(`${label}: must open with a --- frontmatter delimiter`);
@@ -51,7 +92,10 @@ const parseFrontmatter = (content, label) => {
     return null;
   }
   const block = content.slice(4, end);
-  const fields = {};
+  const fields = Object.create(null);
+  // Keys that were present but unreadable. Without this they look absent, and
+  // a rejected description is reported a second time as a missing one.
+  const rejected = new Set();
   for (const line of block.split("\n")) {
     if (!line.trim() || line.trimStart().startsWith("#")) continue;
     const match = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
@@ -59,9 +103,22 @@ const parseFrontmatter = (content, label) => {
       fail(`${label}: frontmatter line is not a 'key: value' pair -> ${line}`);
       continue;
     }
-    fields[match[1]] = unquote(match[2].trim());
+    const [, key, raw] = match;
+    // Last one would otherwise win silently, which is not what a YAML parser
+    // does with a duplicate key.
+    if (key in fields) {
+      fail(`${label}: frontmatter sets '${key}' more than once`);
+      continue;
+    }
+    const scalar = readScalar(raw.trim());
+    if (scalar.error) {
+      fail(`${label}: frontmatter '${key}': ${scalar.error}`);
+      rejected.add(key);
+      continue;
+    }
+    fields[key] = scalar.value;
   }
-  return { fields, body: content.slice(end + 4) };
+  return { fields, rejected, body: content.slice(end + 4) };
 };
 
 // --- marketplace and plugin manifests ---------------------------------------
@@ -144,8 +201,9 @@ for (const plugin of pluginDirs) {
     const parsed = parseFrontmatter(readFileSync(join(root, path), "utf8"), path);
     if (!parsed) continue;
 
-    const { fields, body } = parsed;
+    const { fields, rejected, body } = parsed;
     for (const field of ["name", "description"]) {
+      if (rejected.has(field)) continue;
       if (!fields[field]) fail(`${path}: frontmatter '${field}' is required and must be non-empty`);
     }
     if (fields.name && fields.name !== skill) {
@@ -164,7 +222,11 @@ for (const plugin of pluginDirs) {
 // --- README -------------------------------------------------------------------
 
 const readmePath = "README.md";
-if (existsSync(join(root, readmePath))) {
+if (!existsSync(join(root, readmePath))) {
+  // Skipping quietly would report a pass on a repo whose entry point is gone,
+  // taking the skills table and every relative link with it.
+  fail(`${readmePath}: is required, and is where the skills table lives`);
+} else {
   const readme = readFileSync(join(root, readmePath), "utf8");
 
   const rows = [...readme.matchAll(/^\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|/gm)].map((m) => ({

@@ -5,7 +5,7 @@
 // has to be caught before merge.
 
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 const root = process.cwd();
 const errors = [];
@@ -229,7 +229,18 @@ if (!existsSync(join(root, readmePath))) {
 } else {
   const readme = readFileSync(join(root, readmePath), "utf8");
 
-  const rows = [...readme.matchAll(/^\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|/gm)].map((m) => ({
+  // Only the table under `## Skills` describes skills. Matching link rows
+  // across the whole file would read any other table the README grows as a
+  // list of skills, and fail on every row of it.
+  const heading = /^##\s+Skills\s*$/m.exec(readme);
+  const section = heading
+    ? readme.slice(heading.index + heading[0].length).split(/^##\s/m)[0]
+    : "";
+  // Without the section there is no table to check any skill against, and
+  // saying so once beats repeating it per skill.
+  if (!heading) fail(`${readmePath}: has no '## Skills' section to hold the skills table`);
+
+  const rows = [...section.matchAll(/^\|\s*\[([^\]]+)\]\(([^)]+)\)\s*\|/gm)].map((m) => ({
     name: m[1],
     target: m[2],
     // Compared against a directory on disk, so drop anything addressing
@@ -237,27 +248,42 @@ if (!existsSync(join(root, readmePath))) {
     path: m[2].split(/[#?]/)[0],
   }));
 
-  for (const skill of skills) {
-    const row = rows.find((r) => r.name === skill.name);
-    if (!row) {
-      fail(`${readmePath}: skills table has no row for '${skill.name}'`);
+  // Checking each row, rather than the first one bearing a given name, is what
+  // catches a second row that names a real skill but links somewhere else.
+  const listed = new Map();
+  for (const row of rows) {
+    if (listed.has(row.name)) {
+      fail(`${readmePath}: skills table lists '${row.name}' more than once`);
+      continue;
+    }
+    listed.set(row.name, row);
+
+    const skill = skills.find((s) => s.name === row.name);
+    if (!skill) {
+      fail(`${readmePath}: skills table lists '${row.name}', which does not exist on disk`);
     } else if (row.path !== skill.path) {
-      fail(`${readmePath}: row '${skill.name}' links to '${row.target}', expected '${skill.path}'`);
+      fail(`${readmePath}: row '${row.name}' links to '${row.target}', expected '${skill.path}'`);
     }
   }
-  for (const row of rows) {
-    if (!skills.some((s) => s.name === row.name)) {
-      fail(`${readmePath}: skills table lists '${row.name}', which does not exist on disk`);
+  for (const skill of skills) {
+    if (heading && !listed.has(skill.name)) {
+      fail(`${readmePath}: skills table has no row for '${skill.name}'`);
     }
   }
 
+  const repoRoot = resolve(root);
   for (const [, target] of readme.matchAll(/\]\(([^)]+)\)/g)) {
     if (/^(https?:|mailto:|#)/.test(target)) continue;
     // A fragment or query is addressing within the target, not part of the
     // path on disk.
     const path = target.split(/[#?]/)[0];
     if (!path) continue;
-    if (!existsSync(join(root, path))) {
+    // A link reaching above the repository is broken for anyone reading the
+    // README on GitHub, however well it resolves on the machine running this.
+    const linked = resolve(repoRoot, path);
+    if (linked !== repoRoot && !linked.startsWith(`${repoRoot}${sep}`)) {
+      fail(`${readmePath}: relative link '${target}' points outside the repository`);
+    } else if (!existsSync(linked)) {
       fail(`${readmePath}: relative link '${target}' does not resolve`);
     }
   }

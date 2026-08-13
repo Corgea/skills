@@ -31,10 +31,17 @@ common setup mistake.
 Requests are stateless POST with JSON responses. Standalone SSE streams are not
 supported, so a client configured for SSE-only transport will fail to connect.
 
+Put the token in the environment first, not in the config file:
+
+```bash
+export CORGEA_TOKEN="..."   # in ~/.zshrc, ~/.bashrc, or a secret manager
+```
+
 ### Cursor
 
 Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json`
-(Windows):
+(Windows). `${env:NAME}` is Cursor's interpolation syntax and is resolved in
+`args`, `env`, `url` and `headers`:
 
 ```json
 {
@@ -46,15 +53,16 @@ Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json
         "mcp-remote",
         "https://www.corgea.app/mcp",
         "--header",
-        "CORGEA-TOKEN: ${CORGEA_TOKEN}"
-      ],
-      "env": {
-        "CORGEA_TOKEN": "your_api_token_here"
-      }
+        "CORGEA-TOKEN: ${env:CORGEA_TOKEN}"
+      ]
     }
   }
 }
 ```
+
+Cursor reads the variable from its own environment, so a GUI-launched Cursor on
+macOS may not see an export added to a shell profile until it is restarted. If
+the header arrives empty, that is the first thing to check.
 
 ### Claude Desktop
 
@@ -68,11 +76,15 @@ Restart Claude Desktop afterwards.
   "mcpServers": {
     "corgea": {
       "url": "https://www.corgea.app/mcp",
-      "headers": { "CORGEA-TOKEN": "your_api_token_here" }
+      "headers": { "CORGEA-TOKEN": "${env:CORGEA_TOKEN}" }
     }
   }
 }
 ```
+
+Interpolation syntax belongs to the client, not to MCP — `${env:NAME}` is
+Cursor's. Check what the client in front of you supports, and if it has none,
+launch it with the variable already set rather than pasting the token in.
 
 ## Tools
 
@@ -140,4 +152,6 @@ without `scan_id` or `project` to confirm data exists.
 
 The token grants read access to every finding in the account. Keep it in an
 environment variable or a secret manager, never in a committed config file, and
-revoke it in the Corgea app if it leaks.
+revoke it in the Corgea app if it leaks. This applies with most force to a
+project-local `.cursor/mcp.json`, which is the copy that gets committed by
+accident.

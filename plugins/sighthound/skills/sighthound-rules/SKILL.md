@@ -58,21 +58,29 @@ Three things trip up anyone arriving from Semgrep or YAML rules:
 
 ### Fields
 
-Only `mode` and its matching payload change what the scanner does. Everything
-else is metadata that shapes the finding.
+Fields fall into two groups, and knowing which is which is most of debugging a
+rule. If it fires in the wrong place or not at all, the cause is in the first
+group; the second only labels what gets reported.
+
+**What the rule matches**
 
 | Field | Required | Notes |
 |---|---|---|
 | `mode` | no | `"search"` or `"taint"`; omitted means `"search"`. Every rule in the repo states it anyway — do the same |
 | `pattern` / `patterns` | search mode | At least one |
-| `sources` / `sinks` | taint mode | `sanitizers` and `propagators` optional |
+| `sources` / `sinks` | taint mode | `sanitizers` and `propagators` are optional, and both cut down the flows reported |
+| `file_types` | no | `extensions`, `include_patterns`, `exclude_patterns`. Decides which files the rule is applied to at all |
+| `conditions` | no | AST and context filters, search mode |
+
+**What the finding says**
+
+| Field | Required | Notes |
+|---|---|---|
 | `id`, `name`, `category`, `description` | no | Always set these; findings are unreadable without them |
 | `severity` | no | `Critical`, `High`, `Medium`, `Low`. Omitted reports as `Medium` |
 | `confidence` | no | `High`, `Medium`, `Low`. Omitted reports as `Medium` |
 | `finding_type` | no | Free text, Title Case: `Command Injection`, `SQL Injection`, `Cross-Site Scripting` |
 | `cwe_id` | no | Lowercase `cwe-<number>`, e.g. `cwe-78`. `CWE-78` appears only in comments |
-| `file_types` | no | `extensions`, `include_patterns`, `exclude_patterns` |
-| `conditions` | no | AST and context filters, search mode |
 | `tags`, `message` | no | |
 
 ## Search mode

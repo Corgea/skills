@@ -1,6 +1,6 @@
 ---
 name: corgea-scan
-description: Scan a codebase for security vulnerabilities with Corgea's AI-powered BLAST scanner, then review and apply the AI-generated fixes. Use when asked to security-scan a project, scan a pull request diff or uncommitted changes before committing, list or inspect Corgea security or code-quality findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report to Corgea, gate CI on severity or blocking rules, or produce SARIF or a CycloneDX SBOM.
+description: Scan a codebase or built container image for security vulnerabilities with Corgea's AI-powered BLAST scanner, then review and apply the AI-generated fixes. Use when asked to security-scan a project, image, pull request diff, or uncommitted changes, reuse a recent commit scan, list or inspect Corgea security or code-quality findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report, gate CI, or produce SARIF or a CycloneDX SBOM.
 ---
 
 # Corgea
@@ -52,7 +52,8 @@ already be installed and on `PATH`; Corgea only orchestrates and uploads them.
 
 Most flags are BLAST-only and exit 1 with `semgrep` or `snyk`: `--fail`,
 `--fail-on`, `--block-on`, `--only-uncommitted`, `--out-format`, `--out-file`,
-`--exclude`, `--metadata`, and `--sbom`. `--target`, `--scan-type`, and `--policy` are worse — those
+`--exclude`, `--metadata`, `--sbom`, `--include-image`, and
+`--skip-if-commit-scanned-recently`. `--target`, `--scan-type`, and `--policy` are worse — those
 scanners accept them and then silently ignore them, always scanning the whole
 project. `--project-name` is the only flag that behaves the same everywhere.
 
@@ -70,6 +71,21 @@ corgea scan --exclude 'tests/**,**/*.spec.js'        # drop matching files
 
 `--only-uncommitted` and `--target` are mutually exclusive. `--exclude` needs
 CLI 1.9.1 or newer.
+
+Full-project uploads report whether the worktree differs from the commit and
+print a notice for ordinary uncommitted changes.
+
+### Scan built images
+
+```bash
+corgea scan --include-image myapp:1.2.3
+corgea scan --include-image api:latest --include-image worker:latest
+```
+
+The repeatable flag exports each local image with Docker or Podman, pulling it
+first if absent, and scans it instead of Dockerfile/Compose base images. Set
+`CORGEA_CONTAINER_ENGINE` to select the CLI. An image alone is enough when
+`--target` or `--only-uncommitted` finds no source files.
 
 ### Narrow the scan type
 
@@ -92,7 +108,23 @@ corgea scan --project-name my-service                     # defaults to the git 
 ```
 
 `--out-format` and `--out-file` must be passed together; either one alone is
-an error.
+an error. Reports and SBOMs are written before `--fail` / `--block-on` are
+evaluated, so they remain available when a gate exits 1.
+
+### Reuse a recent commit scan
+
+```bash
+corgea scan --skip-if-commit-scanned-recently --block-on criticals
+corgea scan --skip-if-commit-scanned-recently --scanned-within 4h
+```
+
+This reuses a completed, clean, successful BLAST scan of the same commit within
+24 hours by default (`s`, `m`, `h`, and `d` units; a bare number means hours).
+It still prints results, exports reports, and evaluates `--block-on`. Parse
+`CORGEA_SCAN_SKIPPED=true|false`; a reuse also prints `CORGEA_SCAN_ID=<id>`.
+It cannot be combined with `--only-uncommitted`, `--target`, `--scan-type`,
+`--policy`, or `--include-image`; `--exclude` is allowed but a reused whole-
+commit scan may include excluded files. Failure to resolve a commit exits 1.
 
 ## Wait
 
@@ -110,6 +142,11 @@ corgea wait SCAN_ID --project-id PROJECT_ID
 
 Use `--repo` with an `org/repo` slug or remote URL, or `--project-name` to
 query an exact Corgea project name. `--project-id` requires `SCAN_ID`.
+
+`scan`, `wait`, and `upload --wait` exit 1 for a failed scan; missing results
+from one scanner only warn and exit 0. Polling times out after 10 hours; set
+`CORGEA_SCAN_TIMEOUT_SECONDS` to override it. Blocking-rule evaluation times
+out after 15 minutes; override with `CORGEA_BLOCKING_RULES_TIMEOUT_SECONDS`.
 
 ## Read findings
 
@@ -194,6 +231,7 @@ GitHub Code Scanning:
 corgea upload report.json                       # Semgrep JSON, SARIF, Checkmarx, Coverity XML
 corgea upload report.fpr                        # Fortify
 corgea upload report.sarif --project-name svc
+corgea upload report.sarif --wait               # wait, print results, propagate scan failure
 cat report.json | corgea upload                 # stdin
 ```
 

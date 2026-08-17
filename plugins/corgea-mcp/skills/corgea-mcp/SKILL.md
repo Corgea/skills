@@ -47,7 +47,7 @@ header written the natural way arrives mangled.
 
 Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json`
 (Windows). Cursor resolves `${env:NAME}` in `args`, `env`, `url` and `headers`,
-so the token can stay in your shell and out of the file:
+so the token can live in the environment rather than the file:
 
 ```json
 {
@@ -73,10 +73,15 @@ The `mcp-remote` bridge is required here, not a convenience. Cursor's built-in
 server refuses; the connection drops with
 `Failed to open SSE stream: Not Acceptable` and no tools appear.
 
-Cursor substitutes from its own environment, so a GUI launch on macOS may not
-see `export CORGEA_TOKEN=...` added to a shell profile until Cursor is
-restarted. `launchctl setenv CORGEA_TOKEN <value>` before relaunching is the
-reliable way. If the header arrives empty, check that first.
+Cursor substitutes from its own process environment, and `export
+CORGEA_TOKEN=...` in a terminal reaches only that shell and its children. A
+Cursor started from the Dock, Start menu or a desktop entry never sees it, and
+the header goes out empty — check this first when the answer is a `401`. Set it
+where the desktop session will find it, then restart Cursor: `launchctl setenv
+CORGEA_TOKEN <value>` on macOS, `setx CORGEA_TOKEN <value>` on Windows, or
+`CORGEA_TOKEN=<value>` in `~/.config/environment.d/corgea.conf` on Linux.
+Launching Cursor from a shell that already exports it works anywhere and
+settles the question in one step.
 
 Cursor spawns its own copy of the bridge; you never run `mcp-remote` yourself.
 

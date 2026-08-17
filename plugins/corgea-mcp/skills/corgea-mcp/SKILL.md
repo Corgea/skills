@@ -1,6 +1,6 @@
 ---
 name: corgea-mcp
-description: Connect an agent to Corgea's hosted MCP server and query security data - scans, security issues, SCA and IaC findings, code quality issues, dependency inventory, and blocking rules. Use when asked to set up Corgea MCP in Cursor or Claude Desktop, look up what vulnerabilities a scan found, check whether a dependency is vulnerable or reachable, prioritise findings by severity, or check which blocking rules would fail a deployment.
+description: Connect an agent to Corgea's hosted MCP server and query security data - scans, security issues, SCA and IaC findings, code quality issues, dependency inventory, and blocking rules. Use when asked to set up Corgea MCP in Cursor or Claude Desktop, look up what vulnerabilities a scan found, check whether a dependency is vulnerable or reachable, export the dependency list as CSV, prioritise findings by severity, or check which blocking rules would fail a deployment.
 ---
 
 # Corgea MCP
@@ -55,6 +55,8 @@ so the token can stay in your shell and out of the file:
         "-y",
         "mcp-remote",
         "https://www.corgea.app/mcp",
+        "--transport",
+        "http-only",
         "--header",
         "CORGEA-TOKEN:${env:CORGEA_TOKEN}"
       ]
@@ -63,9 +65,17 @@ so the token can stay in your shell and out of the file:
 }
 ```
 
+The `mcp-remote` bridge is required here, not a convenience. Cursor's built-in
+`"url"` form connects and then tries to open a GET SSE stream, which this
+server refuses; the connection drops with
+`Failed to open SSE stream: Not Acceptable` and no tools appear.
+
 Cursor substitutes from its own environment, so a GUI launch on macOS may not
 see `export CORGEA_TOKEN=...` added to a shell profile until Cursor is
-restarted. If the header arrives empty, check that first.
+restarted. `launchctl setenv CORGEA_TOKEN <value>` before relaunching is the
+reliable way. If the header arrives empty, check that first.
+
+Cursor spawns its own copy of the bridge; you never run `mcp-remote` yourself.
 
 ### Claude Desktop
 
@@ -107,7 +117,8 @@ afterwards.
 
 ### Clients supporting direct HTTP
 
-Anything speaking streamable HTTP can skip the `mcp-remote` bridge:
+A client that posts JSON and does not insist on a standalone SSE stream can
+skip the bridge:
 
 ```json
 {
@@ -120,45 +131,51 @@ Anything speaking streamable HTTP can skip the `mcp-remote` bridge:
 }
 ```
 
-The `${env:...}` shown is Cursor's spelling. Claude Code uses `${VAR}`, other
-clients differ again, and a client with no interpolation at all needs the
-variable set in the environment it is launched from.
+Test it before trusting it. Several clients advertise streamable HTTP and still
+open a GET SSE stream on connect, which fails here — Cursor is one, so do not
+use this shape there. `Not Acceptable` or a 406 on connect is that.
+
+The `${env:...}` shown is Cursor's spelling, kept for consistency with the rest
+of this file. Claude Code uses `${VAR}`, other clients differ again, and a
+client with no interpolation at all needs the variable set in the environment
+it is launched from.
 
 ## Tools
 
-Scans:
+**Call `get_server_instructions` first.** The server says so in the tool's own
+description, and what it returns is newer than this file.
 
-- `list_scans` — filter by `project`, `repo`, `branch`, `pull_request_id`
-- `get_scan_info` — one scan by `scan_id`
+Your client already holds the real tool list and the full argument schema for
+each one, from `tools/list`. Work from those, not from a list written here — a
+copy goes stale the first time a tool is added. What follows is a map of what
+exists, not a signature reference:
 
-Security issues (SAST):
+| Area | Tools |
+|---|---|
+| Scans | `list_scans`, `get_scan_info` |
+| SAST | `list_security_issues`, `get_issue_info` |
+| SCA | `list_sca_security_issues`, `get_sca_issue_info`, `list_dependencies`, `export_dependencies_csv` |
+| IaC | `list_iac_security_issues` |
+| Code quality | `list_code_quality_issues` |
+| Policy | `get_blocking_rules` |
+| Meta | `get_server_instructions` |
 
-- `list_security_issues` — filter by `scan_id`, `project`, `repo`; set
-  `include_reachability` for an endpoint reachability summary per issue
-- `get_issue_info` — one issue by `issue_id`, including the fix recommendation
-
-Dependencies (SCA):
-
-- `list_sca_security_issues` — filter by `severity`, `package`, `ecosystem`,
-  `cve`, `has_fix`, `reachability`
-- `get_sca_issue_info` — one SCA issue, with package, CVE, fix version, and
-  reachability
-- `list_dependencies` — full inventory with version, purl, licence, and whether
-  the dependency is direct
-
-Other:
-
-- `list_iac_security_issues` — Terraform and other IaC findings, filterable by
-  `provider`, `service`, `iac_type`, `rule_id`
-- `list_code_quality_issues` — quality findings, kept separate from security
-  ones. Their `classification` holds a label such as `Maintainability` rather
-  than a CWE, and false positives are excluded by default
-- `get_blocking_rules` — the policies that would block a deployment
+Code quality is deliberately separate from SAST: those findings carry a
+`classification` such as `Maintainability` rather than a CWE, and false
+positives are excluded unless asked for. `export_dependencies_csv` returns a
+download URL rather than the rows themselves, so reach for it when the user
+wants a file and `list_dependencies` when the agent needs the data.
 
 ### Choosing a tool
 
 Start from a `list_*` call to find the ID, then a `get_*` call for detail. Going
 straight to `get_issue_info` requires an ID the user rarely has to hand.
+
+The `list_*` tools take `scan_id`, `project`, `repo`, `page` and `page_size` as
+top-level arguments, and put everything else — `severity`, `urgency`, `status`,
+`branch`, `package`, `ecosystem`, `reachability` and the rest — inside a nested
+`filters` object. Passing them flat is the common mistake. Check the schema
+rather than guessing, since which filters exist differs per tool.
 
 Reachability is the field worth reaching for when prioritising. An SCA issue
 whose `reachability` is `vulnerable_usage_unreachable` is real but not
@@ -169,8 +186,9 @@ and `pending`.
 
 ## Filtering and limits
 
-Paginated tools cap `page_size` at 50. Filter server-side with `project`,
-`repo`, `branch` or `severity` rather than pulling pages and discarding them.
+Paginated tools default to a `page_size` of 20 and cap it at 50. Filter
+server-side with `project`, `repo`, `branch` or `severity` rather than pulling
+pages and discarding them.
 
 Rate limits are 100 requests per minute and 1000 per hour per token, returned
 as `429`. Batch with `list_*` calls instead of looping `get_*` per issue.
@@ -193,3 +211,9 @@ environment variable or a secret manager, never in a committed config file, and
 revoke it in the Corgea app if it leaks. This applies with most force to a
 project-local `.cursor/mcp.json`, which is the copy that gets committed by
 accident.
+
+Keeping it out of the file does not keep it private on the machine. The client
+expands `${env:...}` before spawning the bridge, so the token ends up in
+`mcp-remote`'s command line and is readable by any local process through `ps`.
+That is a reason to scope a token to one machine and rotate it, not a reason to
+go back to writing it in the config.

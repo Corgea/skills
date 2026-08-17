@@ -1,0 +1,9 @@
+{
+  "name": "corgea-mcp",
+  "description": "Query Corgea scans, security issues, SCA and IaC findings, dependencies, and blocking rules over MCP",
+  "version": "1.0.0",
+  "author": { "name": "Corgea", "email": "support@corgea.com" },
+  "repository": "https://github.com/Corgea/skills",
+  "license": "MIT",
+  "keywords": ["mcp", "security", "vulnerability-scanner", "sca", "claude-code"]
+}

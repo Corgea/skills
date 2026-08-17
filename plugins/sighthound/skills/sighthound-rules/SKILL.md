@@ -68,7 +68,9 @@ group; the second only labels what gets reported.
 |---|---|---|
 | `mode` | no | `"search"` or `"taint"`; omitted means `"search"`. Every rule in the repo states it anyway — do the same |
 | `pattern` / `patterns` | search mode | At least one |
-| `sources` / `sinks` | taint mode | `sanitizers` and `propagators` are optional, and both cut down the flows reported |
+| `sources` / `sinks` | taint mode | Both required in taint mode; a flow is reported when one reaches the other |
+| `sanitizers` | no | Suppresses a flow whose expression contains one. The way to cut false positives in taint mode |
+| `propagators` | no | Accepted by the schema and read by nothing — see the traps below. Propagation is built into the analysis, not configured per rule |
 | `file_types` | no | `extensions`, `include_patterns`, `exclude_patterns`. Decides which files the rule is applied to at all |
 | `conditions` | no | AST and context filters, search mode |
 
@@ -226,6 +228,14 @@ it does not recognise, so a typo costs no error and has no effect. Real example:
 `unless:` appears in `rules/javascript/frontend_security.ron`, but no such field
 exists on the rule struct and nothing in the scanner reads it. Those exclusions
 are inert. Check a field against the guide before relying on it.
+
+Being on the struct is not enough either. `propagators` deserializes fine and
+is then read by nothing: `src/models.rs` declares it and no other file in
+`src/` mentions it, which is why no rule under `rules/` sets one. Taint still
+propagates through assignments and concatenation, but that is the analyser's
+own behaviour and a rule cannot add to it. Compare `sanitizers`, which
+`src/scanner/taint_utils.rs` reads on every candidate flow — if you want a rule
+to change which flows are reported, that is the field that does it.
 
 ## Reducing false positives
 

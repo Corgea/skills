@@ -31,17 +31,20 @@ common setup mistake.
 Requests are stateless POST with JSON responses. Standalone SSE streams are not
 supported, so a client configured for SSE-only transport will fail to connect.
 
-Put the token in the environment first, not in the config file:
+There is no shared syntax for referring to a secret from a client config. Each
+block below is written for one client, and moving one to another client does
+not fail loudly: the placeholder is either sent as the token or resolves to
+nothing, and both come back as a `401`.
 
-```bash
-export CORGEA_TOKEN="..."   # in ~/.zshrc, ~/.bashrc, or a secret manager
-```
+Note also the missing space after `CORGEA-TOKEN:` in the `--header` arguments.
+Cursor and Claude Desktop on Windows do not escape spaces inside `args`, so a
+header written the natural way arrives mangled.
 
 ### Cursor
 
 Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json`
-(Windows). `${env:NAME}` is Cursor's interpolation syntax and is resolved in
-`args`, `env`, `url` and `headers`:
+(Windows). Cursor resolves `${env:NAME}` in `args`, `env`, `url` and `headers`,
+so the token can stay in your shell and out of the file:
 
 ```json
 {
@@ -53,23 +56,58 @@ Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json
         "mcp-remote",
         "https://www.corgea.app/mcp",
         "--header",
-        "CORGEA-TOKEN: ${env:CORGEA_TOKEN}"
+        "CORGEA-TOKEN:${env:CORGEA_TOKEN}"
       ]
     }
   }
 }
 ```
 
-Cursor reads the variable from its own environment, so a GUI-launched Cursor on
-macOS may not see an export added to a shell profile until it is restarted. If
-the header arrives empty, that is the first thing to check.
+Cursor substitutes from its own environment, so a GUI launch on macOS may not
+see `export CORGEA_TOKEN=...` added to a shell profile until Cursor is
+restarted. If the header arrives empty, check that first.
 
 ### Claude Desktop
 
-Same block, added under Settings, Developer, in the MCP configuration file.
-Restart Claude Desktop afterwards.
+Under Settings, Developer, Edit Config. Claude Desktop does not interpolate
+config values. What resolves `${CORGEA_TOKEN}` here is `mcp-remote` itself,
+which substitutes `${NAME}` in a header from its own `process.env` — and the
+`env` block is what puts the value there:
+
+```json
+{
+  "mcpServers": {
+    "corgea": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://www.corgea.app/mcp",
+        "--header",
+        "CORGEA-TOKEN:${CORGEA_TOKEN}"
+      ],
+      "env": {
+        "CORGEA_TOKEN": "your token"
+      }
+    }
+  }
+}
+```
+
+Cursor's `${env:CORGEA_TOKEN}` would not fail loudly here: `mcp-remote` reads
+whatever is between the braces as the variable name, finds nothing called
+`env:CORGEA_TOKEN`, and sends the header empty, logging
+`Warning: Environment variable 'env:CORGEA_TOKEN' not found` to stderr. A `401`
+with an empty `CORGEA-TOKEN` is that mistake.
+
+This file lives in your user profile rather than a repository, which is what
+makes writing the token in it tolerable — so keep it out of any dotfiles repo,
+and prefer a token scoped to one machine. Restart Claude Desktop fully
+afterwards.
 
 ### Clients supporting direct HTTP
+
+Anything speaking streamable HTTP can skip the `mcp-remote` bridge:
 
 ```json
 {
@@ -82,9 +120,9 @@ Restart Claude Desktop afterwards.
 }
 ```
 
-Interpolation syntax belongs to the client, not to MCP — `${env:NAME}` is
-Cursor's. Check what the client in front of you supports, and if it has none,
-launch it with the variable already set rather than pasting the token in.
+The `${env:...}` shown is Cursor's spelling. Claude Code uses `${VAR}`, other
+clients differ again, and a client with no interpolation at all needs the
+variable set in the environment it is launched from.
 
 ## Tools
 

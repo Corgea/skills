@@ -1,5 +1,4 @@
 {
-  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "skills",
   "owner": {
     "name": "Corgea",
@@ -18,6 +17,15 @@
       "source": "./plugins/corgea",
       "category": "security",
       "keywords": ["sast", "security", "vulnerability-scanner", "code-fixes", "claude-code"]
+    },
+    {
+      "name": "corgea-mcp",
+      "description": "Query Corgea scans, security issues, SCA and IaC findings, dependencies, and blocking rules over MCP",
+      "version": "1.0.0",
+      "author": { "name": "Corgea", "email": "support@corgea.com" },
+      "source": "./plugins/corgea-mcp",
+      "category": "security",
+      "keywords": ["mcp", "security", "vulnerability-scanner", "sca", "claude-code"]
     },
     {
       "name": "sighthound",

@@ -142,8 +142,10 @@ it is launched from.
 
 ## Tools
 
-**Call `get_server_instructions` first.** The server says so in the tool's own
-description, and what it returns is newer than this file.
+`get_server_instructions` describes itself as *"Always call first"*, but as of
+this writing it returns an empty string, so leading with it costs a round trip
+and tells you nothing. Skip it. If it ever starts returning text, that text is
+the server describing itself and it outranks this file.
 
 Your client already holds the real tool list and the full argument schema for
 each one, from `tools/list`. Work from those, not from a list written here — a

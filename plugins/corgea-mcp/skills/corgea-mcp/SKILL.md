@@ -29,7 +29,10 @@ passed in the **`CORGEA-TOKEN`** header. Not `Authorization` — that is the mos
 common setup mistake.
 
 Requests are stateless POST with JSON responses. Standalone SSE streams are not
-supported, so a client configured for SSE-only transport will fail to connect.
+supported. This is the thing most likely to stop you connecting: a client that
+merely *opens* an SSE stream after connecting fails here, not only one
+configured for SSE-only transport, and Cursor's built-in HTTP client is one of
+those.
 
 There is no shared syntax for referring to a secret from a client config. Each
 block below is written for one client, and moving one to another client does
@@ -162,49 +165,18 @@ exists, not a signature reference:
 | Policy | `get_blocking_rules` |
 | Meta | `get_server_instructions` |
 
-Code quality is deliberately separate from SAST: those findings carry a
-`classification` such as `Maintainability` rather than a CWE, and false
-positives are excluded unless asked for. `export_dependencies_csv` returns a
-download URL rather than the rows themselves, so reach for it when the user
-wants a file and `list_dependencies` when the agent needs the data.
+Each tool's own description carries its filters, valid values and sort keys, in
+more detail than is worth repeating. Read those. What they do not tell you:
 
-### Choosing a tool
-
-Start from a `list_*` call to find the ID, then a `get_*` call for detail. Going
-straight to `get_issue_info` requires an ID the user rarely has to hand.
-
-The `list_*` tools take `scan_id`, `project`, `repo`, `page` and `page_size` as
-top-level arguments, and put everything else — `severity`, `urgency`, `status`,
-`branch`, `package`, `ecosystem`, `reachability` and the rest — inside a nested
-`filters` object. Passing them flat is the common mistake. Check the schema
-rather than guessing, since which filters exist differs per tool.
-
-Reachability is the field worth reaching for when prioritising. An SCA issue
-whose `reachability` is `vulnerable_usage_unreachable` is real but not
-exploitable in this codebase, and should not outrank a reachable medium.
-Supported values are `vulnerable_usage_reachable`,
-`vulnerable_usage_unreachable`, `not_direct_dependency`, `dead_dependency`,
-and `pending`.
-
-## Filtering and limits
-
-Paginated tools default to a `page_size` of 20 and cap it at 50. Filter
-server-side with `project`, `repo`, `branch` or `severity` rather than pulling
-pages and discarding them.
-
-Rate limits are 100 requests per minute and 1000 per hour per token, returned
-as `429`. Batch with `list_*` calls instead of looping `get_*` per issue.
-
-## Responses
-
-```json
-{ "status": "ok", "data": {} }
-```
-
-Errors return `status: "error"` with `message` and `error`. A `401` means the
-token is wrong, expired, or sent in the wrong header — check `CORGEA-TOKEN`
-before anything else. Empty results usually mean the filter did not match: try
-without `scan_id` or `project` to confirm data exists.
+- Every `list_*` filter except `scan_id`, `project`, `repo`, `page` and
+  `page_size` goes inside a nested `filters` object. Passing them flat is the
+  usual mistake.
+- Prefer one `list_*` call to a loop of `get_*` per issue. Rate limits are 100
+  requests a minute and 1000 an hour per token, returned as `429`.
+- Empty results usually mean the filter missed, not that the account is clean.
+  Drop `scan_id` or `project` and retry before reporting nothing found.
+- `export_dependencies_csv` returns a download URL, not rows. It is for handing
+  a file to the user; use `list_dependencies` when you need the data itself.
 
 ## Token handling
 

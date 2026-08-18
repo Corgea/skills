@@ -73,10 +73,14 @@ corgea scan                                          # BLAST (AI), full project 
 corgea scan --only-uncommitted                       # staged, modified, and untracked files
 corgea scan --target src/,pyproject.toml             # paths, globs, or git: selectors
 corgea scan --fail-on CR                             # exit 1 at or above critical (CR, HI, ME, LO)
+corgea scan --skip-if-commit-scanned-recently --ignore-dirty-worktree
 ```
 
 `corgea scan` blocks until the scan completes. `corgea wait [SCAN_ID]` is only
 for when nothing is blocking — you exited a scan early, or ran `corgea upload`.
+`--ignore-dirty-worktree` requires `--skip-if-commit-scanned-recently` and lets
+it reuse a recent scan even when the current or prior worktree is dirty. If a
+new scan runs, it still reports the real dirty status.
 
 ```bash
 corgea ls                                        # scans (alias: corgea list)

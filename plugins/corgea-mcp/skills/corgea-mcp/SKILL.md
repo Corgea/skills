@@ -191,8 +191,13 @@ revoke it in the Corgea app if it leaks. This applies with most force to a
 project-local `.cursor/mcp.json`, which is the copy that gets committed by
 accident.
 
-Keeping it out of the file does not keep it private on the machine. The client
-expands `${env:...}` before spawning the bridge, so the token ends up in
-`mcp-remote`'s command line and is readable by any local process through `ps`.
-That is a reason to scope a token to one machine and rotate it, not a reason to
-go back to writing it in the config.
+Keeping it out of the file does not keep it private on the machine, and how
+exposed it is depends on the client. Cursor expands `${env:...}` itself before
+spawning the bridge, so the token becomes an argument in `mcp-remote`'s command
+line, which `ps` shows to every user on the box. Claude Desktop passes
+`${CORGEA_TOKEN}` through untouched and `mcp-remote` substitutes it internally,
+so it stays in the child process's environment — out of `ps` output, but still
+readable by anything running as you.
+
+Neither is an argument for going back to a literal token in the config. Both
+are arguments for scoping a token to one machine and rotating it.

@@ -1,6 +1,6 @@
 ---
 name: corgea-mcp
-description: Connect an agent to Corgea's hosted MCP server and query security data - scans, security issues, SCA and IaC findings, code quality issues, dependency inventory, and blocking rules. Use when asked to set up Corgea MCP in Cursor or Claude Desktop, look up what vulnerabilities a scan found, check whether a dependency is vulnerable or reachable, prioritise findings by severity, or check which blocking rules would fail a deployment.
+description: Connect an agent to Corgea's hosted MCP server and query security data - scans, security issues, SCA and IaC findings, code quality issues, dependency inventory, and blocking rules. Use when asked to set up Corgea MCP in Cursor or Claude Desktop, look up what vulnerabilities a scan found, check whether a dependency is vulnerable or reachable, export the dependency list as CSV, prioritise findings by severity, or check which blocking rules would fail a deployment.
 ---
 
 # Corgea MCP
@@ -29,7 +29,10 @@ passed in the **`CORGEA-TOKEN`** header. Not `Authorization` — that is the mos
 common setup mistake.
 
 Requests are stateless POST with JSON responses. Standalone SSE streams are not
-supported, so a client configured for SSE-only transport will fail to connect.
+supported. This is the thing most likely to stop you connecting: a client that
+merely *opens* an SSE stream after connecting fails here, not only one
+configured for SSE-only transport, and Cursor's built-in HTTP client is one of
+those.
 
 There is no shared syntax for referring to a secret from a client config. Each
 block below is written for one client, and moving one to another client does
@@ -44,7 +47,7 @@ header written the natural way arrives mangled.
 
 Add to `~/.cursor/mcp.json` (macOS and Linux) or `%APPDATA%\Cursor\User\mcp.json`
 (Windows). Cursor resolves `${env:NAME}` in `args`, `env`, `url` and `headers`,
-so the token can stay in your shell and out of the file:
+so the token can live in the environment rather than the file:
 
 ```json
 {
@@ -55,6 +58,8 @@ so the token can stay in your shell and out of the file:
         "-y",
         "mcp-remote",
         "https://www.corgea.app/mcp",
+        "--transport",
+        "http-only",
         "--header",
         "CORGEA-TOKEN:${env:CORGEA_TOKEN}"
       ]
@@ -63,9 +68,22 @@ so the token can stay in your shell and out of the file:
 }
 ```
 
-Cursor substitutes from its own environment, so a GUI launch on macOS may not
-see `export CORGEA_TOKEN=...` added to a shell profile until Cursor is
-restarted. If the header arrives empty, check that first.
+The `mcp-remote` bridge is required here, not a convenience. Cursor's built-in
+`"url"` form connects and then tries to open a GET SSE stream, which this
+server refuses; the connection drops with
+`Failed to open SSE stream: Not Acceptable` and no tools appear.
+
+Cursor substitutes from its own process environment, and `export
+CORGEA_TOKEN=...` in a terminal reaches only that shell and its children. A
+Cursor started from the Dock, Start menu or a desktop entry never sees it, and
+the header goes out empty — check this first when the answer is a `401`. Set it
+where the desktop session will find it, then restart Cursor: `launchctl setenv
+CORGEA_TOKEN <value>` on macOS, `setx CORGEA_TOKEN <value>` on Windows, or
+`CORGEA_TOKEN=<value>` in `~/.config/environment.d/corgea.conf` on Linux.
+Launching Cursor from a shell that already exports it works anywhere and
+settles the question in one step.
+
+Cursor spawns its own copy of the bridge; you never run `mcp-remote` yourself.
 
 ### Claude Desktop
 
@@ -107,7 +125,8 @@ afterwards.
 
 ### Clients supporting direct HTTP
 
-Anything speaking streamable HTTP can skip the `mcp-remote` bridge:
+A client that posts JSON and does not insist on a standalone SSE stream can
+skip the bridge:
 
 ```json
 {
@@ -120,71 +139,49 @@ Anything speaking streamable HTTP can skip the `mcp-remote` bridge:
 }
 ```
 
-The `${env:...}` shown is Cursor's spelling. Claude Code uses `${VAR}`, other
-clients differ again, and a client with no interpolation at all needs the
-variable set in the environment it is launched from.
+Test it before trusting it. Several clients advertise streamable HTTP and still
+open a GET SSE stream on connect, which fails here — Cursor is one, so do not
+use this shape there. `Not Acceptable` or a 406 on connect is that.
+
+The `${env:...}` shown is Cursor's spelling, kept for consistency with the rest
+of this file. Claude Code uses `${VAR}`, other clients differ again, and a
+client with no interpolation at all needs the variable set in the environment
+it is launched from.
 
 ## Tools
 
-Scans:
+`get_server_instructions` describes itself as *"Always call first"*, but as of
+this writing it returns an empty string, so leading with it costs a round trip
+and tells you nothing. Skip it. If it ever starts returning text, that text is
+the server describing itself and it outranks this file.
 
-- `list_scans` — filter by `project`, `repo`, `branch`, `pull_request_id`
-- `get_scan_info` — one scan by `scan_id`
+Your client already holds the real tool list and the full argument schema for
+each one, from `tools/list`. Work from those, not from a list written here — a
+copy goes stale the first time a tool is added. What follows is a map of what
+exists, not a signature reference:
 
-Security issues (SAST):
+| Area | Tools |
+|---|---|
+| Scans | `list_scans`, `get_scan_info` |
+| SAST | `list_security_issues`, `get_issue_info` |
+| SCA | `list_sca_security_issues`, `get_sca_issue_info`, `list_dependencies`, `export_dependencies_csv` |
+| IaC | `list_iac_security_issues` |
+| Code quality | `list_code_quality_issues` |
+| Policy | `get_blocking_rules` |
+| Meta | `get_server_instructions` |
 
-- `list_security_issues` — filter by `scan_id`, `project`, `repo`; set
-  `include_reachability` for an endpoint reachability summary per issue
-- `get_issue_info` — one issue by `issue_id`, including the fix recommendation
+Each tool's own description carries its filters, valid values and sort keys, in
+more detail than is worth repeating. Read those. What they do not tell you:
 
-Dependencies (SCA):
-
-- `list_sca_security_issues` — filter by `severity`, `package`, `ecosystem`,
-  `cve`, `has_fix`, `reachability`
-- `get_sca_issue_info` — one SCA issue, with package, CVE, fix version, and
-  reachability
-- `list_dependencies` — full inventory with version, purl, licence, and whether
-  the dependency is direct
-
-Other:
-
-- `list_iac_security_issues` — Terraform and other IaC findings, filterable by
-  `provider`, `service`, `iac_type`, `rule_id`
-- `list_code_quality_issues` — quality findings, kept separate from security
-  ones. Their `classification` holds a label such as `Maintainability` rather
-  than a CWE, and false positives are excluded by default
-- `get_blocking_rules` — the policies that would block a deployment
-
-### Choosing a tool
-
-Start from a `list_*` call to find the ID, then a `get_*` call for detail. Going
-straight to `get_issue_info` requires an ID the user rarely has to hand.
-
-Reachability is the field worth reaching for when prioritising. An SCA issue
-whose `reachability` is `vulnerable_usage_unreachable` is real but not
-exploitable in this codebase, and should not outrank a reachable medium.
-Supported values are `vulnerable_usage_reachable`,
-`vulnerable_usage_unreachable`, `not_direct_dependency`, `dead_dependency`,
-and `pending`.
-
-## Filtering and limits
-
-Paginated tools cap `page_size` at 50. Filter server-side with `project`,
-`repo`, `branch` or `severity` rather than pulling pages and discarding them.
-
-Rate limits are 100 requests per minute and 1000 per hour per token, returned
-as `429`. Batch with `list_*` calls instead of looping `get_*` per issue.
-
-## Responses
-
-```json
-{ "status": "ok", "data": {} }
-```
-
-Errors return `status: "error"` with `message` and `error`. A `401` means the
-token is wrong, expired, or sent in the wrong header — check `CORGEA-TOKEN`
-before anything else. Empty results usually mean the filter did not match: try
-without `scan_id` or `project` to confirm data exists.
+- Every `list_*` filter except `scan_id`, `project`, `repo`, `page` and
+  `page_size` goes inside a nested `filters` object. Passing them flat is the
+  usual mistake.
+- Prefer one `list_*` call to a loop of `get_*` per issue. Rate limits are 100
+  requests a minute and 1000 an hour per token, returned as `429`.
+- Empty results usually mean the filter missed, not that the account is clean.
+  Drop `scan_id` or `project` and retry before reporting nothing found.
+- `export_dependencies_csv` returns a download URL, not rows. It is for handing
+  a file to the user; use `list_dependencies` when you need the data itself.
 
 ## Token handling
 
@@ -193,3 +190,14 @@ environment variable or a secret manager, never in a committed config file, and
 revoke it in the Corgea app if it leaks. This applies with most force to a
 project-local `.cursor/mcp.json`, which is the copy that gets committed by
 accident.
+
+Keeping it out of the file does not keep it private on the machine, and how
+exposed it is depends on the client. Cursor expands `${env:...}` itself before
+spawning the bridge, so the token becomes an argument in `mcp-remote`'s command
+line, which `ps` shows to every user on the box. Claude Desktop passes
+`${CORGEA_TOKEN}` through untouched and `mcp-remote` substitutes it internally,
+so it stays in the child process's environment — out of `ps` output, but still
+readable by anything running as you.
+
+Neither is an argument for going back to a literal token in the config. Both
+are arguments for scoping a token to one machine and rotating it.

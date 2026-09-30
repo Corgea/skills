@@ -52,7 +52,7 @@ brew tap Corgea/cli && brew install corgea-cli
 ```
 
 Or grab a binary from the [latest release](https://github.com/Corgea/cli/releases/latest)
-(`corgea-<arch>-<platform>.zip`) and put it on `PATH`.
+(`corgea-v<version>-<target>.zip`) and put it on `PATH`.
 
 ## Authenticate
 

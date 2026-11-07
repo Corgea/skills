@@ -1,6 +1,6 @@
 ---
 name: corgea-scan
-description: Drive the Corgea CLI to scan code for security vulnerabilities with the AI-powered BLAST scanner and apply the AI-generated fixes, gate pip and npm installs against vulnerable or malicious packages, inventory dependencies and produce SBOMs, and look up advisories. Use when asked to security-scan a project, scan a pull request diff or uncommitted changes before committing, install a pip/npm package safely, list or inspect Corgea findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report, gate CI on severity, or produce SARIF for GitHub Code Scanning.
+description: Drive the Corgea CLI to scan code for security vulnerabilities with the AI-powered BLAST scanner and apply the AI-generated fixes, gate pip and npm installs against vulnerable or malicious packages, inventory dependencies and produce SBOMs, look up advisories, and install Corgea MCP for an agent. Use when asked to security-scan a project, scan a pull request diff or uncommitted changes before committing, install a pip/npm package safely, connect an agent to Corgea MCP, list or inspect Corgea findings, view or apply a fix diff, upload a Semgrep/SARIF/Checkmarx/Coverity/Fortify report, gate CI on severity, or produce SARIF for GitHub Code Scanning.
 ---
 
 # Corgea CLI
@@ -65,6 +65,16 @@ corgea login --url https://<instance>.corgea.app <TOKEN>  # single-tenant token
 
 `CORGEA_TOKEN` and `CORGEA_URL` are both read from the environment, so a bare
 `corgea login` works in CI when they are set.
+
+## Connect an agent to Corgea MCP
+
+```bash
+corgea mcp install --agent <agent>
+```
+
+This installs or refreshes the hosted Corgea MCP server in the agent's config,
+using the URL and token from the Corgea login. Check `corgea mcp install --help`
+for supported agents, scopes, and config locations.
 
 ## Core commands
 

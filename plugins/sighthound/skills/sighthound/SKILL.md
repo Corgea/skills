@@ -1,6 +1,6 @@
 ---
 name: sighthound
-description: Scan source code for security vulnerabilities with Sighthound, a fast tree-sitter based SAST scanner with pattern matching and taint-flow (source-to-sink) analysis. Use when asked to security-scan a codebase, find SQL injection / XSS / command injection and other CWE flaws, run SAST locally or in CI, gate a build on findings, or produce SARIF for GitHub Code Scanning. Supports Python, JavaScript, TypeScript, Java, PHP, C#, Go, Ruby, ObjectScript, and HTML/Django templates.
+description: Scan source code for security vulnerabilities with Sighthound, a fast tree-sitter based SAST scanner with pattern matching and taint-flow (source-to-sink) analysis. Use when asked to security-scan a codebase, find SQL injection / XSS / command injection and other CWE flaws, run SAST locally or in CI, gate a build on findings, or produce SARIF for GitHub Code Scanning. Supports Python, JavaScript, TypeScript, Java, PHP, C#, Go, Ruby, ObjectScript, and HTML/Django templates, plus text-matched SQL, XML, properties, and config files.
 ---
 
 # Sighthound
@@ -91,6 +91,9 @@ from `source_info.location` to `sink_info.location` is the evidence. Fix by
 breaking the flow (parameterize, escape, validate), not by editing the snippet
 cosmetically.
 
+In SQL, XML, properties, and config files, two rules matching one line report
+one finding each.
+
 ## Gate CI
 
 Exit code is 0 even when findings exist, unless you ask for a gate:
@@ -140,11 +143,21 @@ sighthound <root_dir> <language> <rules_path> --use-file-rules
 ```
 
 Language values: `python`, `java`, `javascript`, `tsx`, `typescript`, `go`,
-`ruby`, `csharp`, `html`, `django`, `php`, `objectscript`.
+`ruby`, `csharp`, `html`, `django`, `php`, `objectscript`, `sql`, `xml`,
+`properties`, `config`.
 
 ## Limitations
 
 - No C/C++ or Razor (`.cshtml`) support.
+- SQL (`.sql`, `.ddl`, `.dml`), XML (`.xml`, `.xsd`, `.xsl`, `.xslt`, `.wsdl`,
+  `.svg`, `.pom`), properties (`.properties`, `.props`), and config (`.config`,
+  `.conf`, `.cfg`, `.ini`, `.env`, `.json`, `.yaml`, `.yml`, `.toml`) files are
+  text-matched and search-only, with no taint analysis, even when a finding
+  has `source_info` or `sink_info`:
+  - Each rule reports at most one finding per file, so rescan after a fix.
+  - Globs match against the whole file, so one without a leading `*` is
+    anchored at the first byte. A clean SQL result is weak evidence.
+  - No bundled rule covers `.ddl`, `.dml`, or `.pom`; those need custom rules.
 - Runtime-only vulnerabilities in dynamic code paths may be missed.
 - Static analysis finds candidates, not proof — read the taint trace before
   reporting a finding as real.

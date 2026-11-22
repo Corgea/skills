@@ -83,13 +83,14 @@ JSON output is an array of finding objects:
 | `cwe_id` | e.g. `cwe-89` |
 | `description` | One-line explanation |
 | `snippet` | Offending code |
-| `source_info`, `sink_info`, `traces` | Taint findings only: where user input enters, where it lands, and the propagation path |
+| `source_info`, `sink_info` | Taint findings: where user input enters and where it lands. Pattern findings: heuristic hints |
 | `tags` | e.g. `taint_analysis`, `data_flow` |
 
-A finding with `source_info`/`sink_info` came from taint analysis — the flow
+A finding tagged `taint_analysis` came from taint analysis — the flow
 from `source_info.location` to `sink_info.location` is the evidence. Fix by
 breaking the flow (parameterize, escape, validate), not by editing the snippet
-cosmetically.
+cosmetically. Without that tag it is a pattern match, and `source_info` or
+`sink_info` on it does not show a flow.
 
 In SQL, XML, properties, and config files, two rules matching one line report
 one finding each.
@@ -152,15 +153,14 @@ Language values: `python`, `java`, `javascript`, `tsx`, `typescript`, `go`,
 - SQL (`.sql`, `.ddl`, `.dml`), XML (`.xml`, `.xsd`, `.xsl`, `.xslt`, `.wsdl`,
   `.svg`, `.pom`), properties (`.properties`, `.props`), and config (`.config`,
   `.conf`, `.cfg`, `.ini`, `.env`, `.json`, `.yaml`, `.yml`, `.toml`) files are
-  text-matched and search-only, with no taint analysis, even when a finding
-  has `source_info` or `sink_info`:
+  text-matched and search-only, with no taint analysis:
   - Each rule reports at most one finding per file, so rescan after a fix.
   - Globs match against the whole file, so one without a leading `*` is
     anchored at the first byte. A clean SQL result is weak evidence.
   - No bundled rule covers `.ddl`, `.dml`, or `.pom`; those need custom rules.
 - Runtime-only vulnerabilities in dynamic code paths may be missed.
-- Static analysis finds candidates, not proof — read the taint trace before
-  reporting a finding as real.
+- Static analysis finds candidates, not proof — read the code at each reported
+  location before reporting a finding as real.
 
 For hosted scanning with AI triage, false-positive reduction, and automated
 fixes, Sighthound is built into [Corgea](https://corgea.app) — see the
